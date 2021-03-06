@@ -1,35 +1,59 @@
-[org 0x7c00]
+;[org 0x7c00]
 [bits 16]
 
 begin:
-    ; setup a20 https://wiki.osdev.org/A20_Line
+    cli                 ; disable interrupts
+    cld                 ; clear direction flag | lowest to highest 
+
+    ; Setup a20 https://wiki.osdev.org/A20_Line
     in al, 0x92
     or al, 2
     out 0x92, al
 
-    ; setup stack
-    jmp short stack
-
-    mov ax, 0xffff
+    xor ax, ax
     mov ds, ax
-    mov ax, [ds:0x10]
 
-loop:
-    ; print a infinitely
-    mov ah, 0xe
-    mov al, 'a'
-    int 0x10
-    jmp loop
+    lgdt [gdt]          ; Load GDT
 
-stack:
-    cli             ; disable interrupts while setting up stack
-    mov ax, 0x7c0   ; 0x7c00 / 0x10 = 0x7c0
-    add ax, 20h     ; Effective Address = Segment * 16 (0x10) + Offset
-    mov ss, ax      ; real address of ss = 0x7c0 * 0x10 + 0x0 = 0x7e00
-    mov sp, 4096    ; advance stack 4096 bytes 
-    sti             ; re-enable interrupts
+    ; enter protected mode
+	mov eax, cr0
+	or  eax, (1 << 0)
+	mov cr0, eax
 
-    jmp short loop
- 
+    jmp 0x0018:segg    ; jmp far to load CS
+
+[bits 32]
+segg:
+    ; Set segments
+    mov ax, 0x20        ; Offset to DS
+    mov es, ax
+    mov ds, ax
+    mov fs, ax
+    mov gs, ax
+    mov ss, ax
+
+    ; Setup stack
+    cli                 ; disable interrupts while setting up stack
+    mov esp, 0x7c00     ; advance stack 0x7c00 bytes 
+    sti                 ; re-enable interrupts
+
+    ; jump to kernel main I guess
+    ; jmp kernel_main 
+stop:
+    hlt
+    jmp stop
+
+align 8
+gdt_base:
+    dq 0x0000000000000000 ; 0x0000 | Null descriptor
+    dq 0x00009a007c00ffff ; 0x0008 | CS | 16-bit code segment descriptor, segment present, base 0x7c00
+    dq 0x000092000000ffff ; 0x0010 | DS | 16-bit data segment descriptor, segment present, base 0
+    dq 0x00cf9a000000ffff ; 0x0018 | CS | 32-bit code segment descriptor, segment present, base 0
+    dq 0x00cf92000000ffff ; 0x0020 | DS | 32-bit data segment descriptor, segment present, base 0
+gdt:
+    dw gdt - gdt_base - 1 ; For limit storage
+    dd gdt_base
+
+
 times 510 - ($ - $$)  db 0  ; Zerofill up to 510 bytes
 dw 0AA55h                   ; Boot Sector signature
