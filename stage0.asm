@@ -1,7 +1,10 @@
+global _begin
+;section .text
 ;[org 0x7c00]
 [bits 16]
 
-begin:
+section .text
+_begin:
     cli                 ; disable interrupts
     cld                 ; clear direction flag | lowest to highest 
 
@@ -43,6 +46,7 @@ stop:
     hlt
     jmp stop
 
+section .data
 align 8
 gdt_base:
     dq 0x0000000000000000 ; 0x0000 | Null descriptor
@@ -55,5 +59,5 @@ gdt:
     dd gdt_base
 
 
-times 510 - ($ - $$)  db 0  ; Zerofill up to 510 bytes
-dw 0AA55h                   ; Boot Sector signature
+;times 510 - ($ - $$)  db 0  ; Zerofill up to 510 bytes
+;dw 0AA55h                   ; Boot Sector signature
