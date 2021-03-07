@@ -1,6 +1,5 @@
-void main()
+void kmain()
 {
-    int a = 2;
-    int b = 3;
-    int c = a + b;
+    // just a test
+    volatile int a = 0x41414141;
 }

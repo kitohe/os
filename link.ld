@@ -16,9 +16,9 @@ SECTIONS
     }
 
     /* Place the boot signature at LMA/VMA 0x7DFE */
-    .sig 0x7DFE : {
+    /* .sig 0x7DFE : {
         SHORT(0xaa55);
-    }
+    } */
 
      /* Place the uninitialised data in the area after our bootloader
      * The BIOS only reads the 512 bytes before this into memory */

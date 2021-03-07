@@ -40,11 +40,12 @@ segg:
     mov esp, 0x7c00     ; advance stack 0x7c00 bytes 
     sti                 ; re-enable interrupts
 
-    ; jump to kernel main I guess
-    ; jmp kernel_main 
-stop:
+    ; call kernel
+    extern kmain
+    call kmain
+.stop:
     hlt
-    jmp stop
+    jmp .stop
 
 section .data
 align 8
@@ -58,6 +59,5 @@ gdt:
     dw gdt - gdt_base - 1 ; For limit storage
     dd gdt_base
 
-
-;times 510 - ($ - $$)  db 0  ; Zerofill up to 510 bytes
-;dw 0AA55h                   ; Boot Sector signature
+times 510 - ($ - $$)  db 0  ; Zerofill up to 510 bytes
+dw 0AA55h                   ; Boot Sector signature
