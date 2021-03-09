@@ -1,19 +1,32 @@
-ENTRY(_begin)
+ENTRY(kmain)
 
 SECTIONS
 {
-    . = 0x7C00;
-    .text : {
-        /* Place the code in hw.o before all other code */
-        /* stage0.o(.text); */
-        *(.text);
-    }
+    . = 0x7e00;
 
-    /* Place the data after the code */
-    .data : SUBALIGN(2) {
-        *(.data);
-        *(.rodata*);
-    }
+    .text BLOCK(4K) : ALIGN(4K)
+	{
+		*(.text)
+	}
+ 
+	/* Read-only data. */
+	.rodata BLOCK(4K) : ALIGN(4K)
+	{
+		*(.rodata)
+	}
+ 
+	/* Read-write data (initialized) */
+	.data BLOCK(4K) : ALIGN(4K)
+	{
+		*(.data)
+	}
+ 
+	/* Read-write data (uninitialized) and stack */
+	.bss BLOCK(4K) : ALIGN(4K)
+	{
+		*(COMMON)
+		*(.bss)
+	}
 
     /* Place the boot signature at LMA/VMA 0x7DFE */
     /* .sig 0x7DFE : {
