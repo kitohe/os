@@ -38,8 +38,34 @@ segg:
     mov esp, 0x7c00     ; advance stack 0x7c00 bytes 
     sti                 ; re-enable interrupts
 
+    ; remap PICs
+    ; https://en.wikibooks.org/wiki/X86_Assembly/Programmable_Interrupt_Controller
+    ; https://wiki.osdev.org/PIC
+    ; http://www.brokenthorn.com/Resources/OSDevPic.html
+    ; ICW 1
+    mov al, 0x11        ; restart vector
+    out 0x20, al        ; restart master PIC
+    out 0xa0, al        ; restart slave PIC
+
+    ; ICW 2
+    mov al, 0x20        ; interrupts offset 32..39
+    out 0x21, al        ; make master PIC vector offset to 0x20 (32)
+    mov al, 0x28        ; interrupts offset 40..47
+    out 0xa1, al        ; make slave PIC vector offset to 0x28 (40)
+
+    ; ICW 3 setup PIC cascading
+    mov al, 0x04        ; make IRQ2 to be connected to slave 0b100
+    out 0x21, al        ; write it to master PIC
+    mov al, 0x02        ; the 80x86 architecture uses IRQ line 2 to connect the master PIC to the slave PIC.
+    out 0xa1, al        ; write it to slave PIC
+
+    ; ICW 4
+    mov al, 0x01        ; put PIC in x86 mode
+    out 0x21, al        ; write to master PIC
+    out 0xa1, al        ; write to slave PIC
+
     ; call cbootloader
-    ; call bmain
+    call bmain
 stop:
     hlt
     jmp stop
