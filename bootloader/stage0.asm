@@ -14,6 +14,7 @@ entry:
     mov ds, ax
 
     lgdt [gdt]          ; Load GDT
+    lidt [idt]          ; Load IDT
 
     ; enter protected mode
 	mov eax, cr0
@@ -37,11 +38,14 @@ segg:
     mov esp, 0x7c00     ; advance stack 0x7c00 bytes 
     sti                 ; re-enable interrupts
 
-    ; call kernel
-    call kmain
+    ; call cbootloader
+    ; call bmain
 stop:
     hlt
     jmp stop
+
+isr0:
+    ret
 
 align 8
 gdt_base:
@@ -53,6 +57,19 @@ gdt_base:
 gdt:
     dw gdt - gdt_base - 1 ; For limit storage
     dd gdt_base
+
+align 8
+idt_base:
+irq0:
+      dw isr0
+      dw 0x0008
+      db 0x00
+      db 10101110b
+      dw 0x0000
+idt:
+    dw idt - idt_base - 1
+    dd idt_base
+
 
 times 510 - ($ - $$)  db 0  ; Zerofill up to 510 bytes
 dw 0xaa55                   ; Boot Sector signature
