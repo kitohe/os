@@ -2,15 +2,15 @@ AS=nasm
 ASFLAGS=-Wall
 
 GCC=i686-elf-gcc
-CFLAGS=-std=gnu99 -ffreestanding -O2 -Wall -Wextra
+CFLAGS=-std=gnu99 -ffreestanding -O0 -Wall -Wextra
 
-LFLAGS=-ffreestanding -O2 -nostdlib -lgcc
-LINK=link.ld
+LFLAGS=-ffreestanding -O0 -nostdlib -lgcc
+LINK=../link.ld
 
 BOOTLOADER_ENTRY=0x7e00
 OUT=../build
 
-all: stage0 bootloader bootloader-obj img
+all: stage0 idt bootloader link bootloader-obj img
 
 stage0: 
 	$(AS) $(ASFLAGS) -f bin stage0.asm -o $(OUT)/stage0.bin -Dbmain=$(BOOTLOADER_ENTRY)
@@ -18,11 +18,18 @@ stage0:
 bootloader-linkable:
 	$(AS) $(ASFLAGS) -f elf32 stage0.asm -o $(OUT)/bootloader_linkable.o
 
+idt:
+	$(AS) $(ASFLAGS) -f elf32 idt.asm -o $(OUT)/idt_asm.o
+
 bootloader:
-	$(GCC) $(CFLAGS) -T $(LINK) -c bootloader.c -o $(OUT)/bootloader.o
+	$(GCC) $(CFLAGS) -c bootloader.c -o $(OUT)/bootloader.o
+	# $(GCC) $(CFLAGS) -T $(LINK) -c idt.c -o $(OUT)/idt.o
+
+link:
+	$(GCC) $(LFLAGS) -T $(LINK) $(OUT)/bootloader.o $(OUT)/idt_asm.o -o $(OUT)/out.o
 
 bootloader-obj:
-	objcopy -O binary $(OUT)/bootloader.o $(OUT)/bootloader.bin
+	objcopy -O binary $(OUT)/out.o $(OUT)/bootloader.bin
 
 img:
 	dd if=/dev/zero of=$(OUT)/bootloader.img bs=1024 count=1440

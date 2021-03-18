@@ -1,32 +1,32 @@
-ENTRY(kmain)
+ENTRY(bmain)
 
 SECTIONS
 {
     . = 0x7e00;
 
-    .text BLOCK(4K) : ALIGN(4K)
+    /* .text BLOCK(4K) : ALIGN(4K)
 	{
 		*(.text)
-	}
+	} */
  
 	/* Read-only data. */
-	.rodata BLOCK(4K) : ALIGN(4K)
+	/* .rodata BLOCK(4K) : ALIGN(4K)
 	{
 		*(.rodata)
-	}
+	} */
  
 	/* Read-write data (initialized) */
-	.data BLOCK(4K) : ALIGN(4K)
+	/* .data BLOCK(4K) : ALIGN(4K)
 	{
 		*(.data)
-	}
+	} */
  
 	/* Read-write data (uninitialized) and stack */
-	.bss BLOCK(4K) : ALIGN(4K)
+	/* .bss BLOCK(4K) : ALIGN(4K)
 	{
 		*(COMMON)
 		*(.bss)
-	}
+	} */
 
     /* Place the boot signature at LMA/VMA 0x7DFE */
     /* .sig 0x7DFE : {
