@@ -18,12 +18,12 @@ AS_SRSC := $(filter-out stage0.asm, $(AS_SRCS))
 AS_OBJS := $(patsubst %.asm, %.o, $(AS_SRCS)) # substitue all .c files to .o
 AS_OBJS := $(filter-out stage0.o, $(AS_OBJS))
 
-OBJS := $(wildcard $(OUT)/*.o)
-OBJS := $(filter-out $(OUT)/out.o, $(OBJS))
+OBJS := $(C_OBJS) $(AS_OBJS)
+OBJS := $(addprefix $(OUT)/, $(OBJS))
 
 .PHONY: all clean
 
-all: stage0 $(C_OBJS) $(AS_OBJS) link bootloader-obj img
+all: stage0 $(C_OBJS) $(AS_OBJS) link bootloader-obj img iso clean
 
 %.o: %.c
 	$(GCC) $(CFLAGS) -c $< -o $(OUT)/$@
@@ -34,7 +34,8 @@ all: stage0 $(C_OBJS) $(AS_OBJS) link bootloader-obj img
 stage0:
 	$(AS) $(ASFLAGS) -f bin stage0.asm -o $(OUT)/stage0.bin -Dbmain=$(BOOTLOADER_ENTRY)
 
-link: $()
+link:
+	@echo $(OBJS)
 	$(GCC) $(LFLAGS) -T $(LINK) $(OBJS) -o $(OUT)/out.o
 
 bootloader-obj:
@@ -44,6 +45,9 @@ img:
 	dd if=/dev/zero of=$(OUT)/bootloader.img bs=1024 count=1440
 	dd if=$(OUT)/stage0.bin of=$(OUT)/bootloader.img conv=notrunc
 	dd if=$(OUT)/bootloader.bin of=$(OUT)/bootloader.img conv=notrunc seek=1
+
+iso:
+	cd ../build && genisoimage -no-emul-boot -boot-load-size 4 -input-charset iso8859-1 -o bootloader.iso -b bootloader.img .
 
 clean:
 	rm $(OUT)/*.o
