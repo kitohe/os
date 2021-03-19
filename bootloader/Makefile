@@ -10,23 +10,32 @@ LINK=../link.ld
 BOOTLOADER_ENTRY=0x7e00
 OUT=../build
 
-all: stage0 idt bootloader link bootloader-obj img
+C_SRCS := $(wildcard *.c) # find all C files
+C_OBJS := $(patsubst %.c, %.o, $(C_SRCS)) # substitue all .c files to .o
 
-stage0: 
+AS_SRCS := $(wildcard *.asm)
+AS_SRSC := $(filter-out stage0.asm, $(AS_SRCS))
+AS_OBJS := $(patsubst %.asm, %.o, $(AS_SRCS)) # substitue all .c files to .o
+AS_OBJS := $(filter-out stage0.o, $(AS_OBJS))
+
+OBJS := $(wildcard $(OUT)/*.o)
+OBJS := $(filter-out $(OUT)/out.o, $(OBJS))
+
+.PHONY: all clean
+
+all: stage0 $(C_OBJS) $(AS_OBJS) link bootloader-obj img
+
+%.o: %.c
+	$(GCC) $(CFLAGS) -c $< -o $(OUT)/$@
+
+%.o: %.asm
+	$(AS) $(ASFLAGS) -f elf32 $< -o $(OUT)/$@
+
+stage0:
 	$(AS) $(ASFLAGS) -f bin stage0.asm -o $(OUT)/stage0.bin -Dbmain=$(BOOTLOADER_ENTRY)
 
-bootloader-linkable:
-	$(AS) $(ASFLAGS) -f elf32 stage0.asm -o $(OUT)/bootloader_linkable.o
-
-idt:
-	$(AS) $(ASFLAGS) -f elf32 idt.asm -o $(OUT)/idt_asm.o
-
-bootloader:
-	$(GCC) $(CFLAGS) -c bootloader.c -o $(OUT)/bootloader.o
-	# $(GCC) $(CFLAGS) -T $(LINK) -c idt.c -o $(OUT)/idt.o
-
-link:
-	$(GCC) $(LFLAGS) -T $(LINK) $(OUT)/bootloader.o $(OUT)/idt_asm.o -o $(OUT)/out.o
+link: $()
+	$(GCC) $(LFLAGS) -T $(LINK) $(OBJS) -o $(OUT)/out.o
 
 bootloader-obj:
 	objcopy -O binary $(OUT)/out.o $(OUT)/bootloader.bin
