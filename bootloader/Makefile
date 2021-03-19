@@ -1,7 +1,7 @@
 AS=nasm
 ASFLAGS=-Wall
 
-GCC=i686-elf-gcc
+CC=i686-elf-gcc
 CFLAGS=-std=gnu99 -ffreestanding -O0 -Wall -Wextra
 
 LFLAGS=-ffreestanding -O0 -nostdlib -lgcc
@@ -26,7 +26,7 @@ OBJS := $(addprefix $(OUT)/, $(OBJS))
 all: stage0 $(C_OBJS) $(AS_OBJS) link bootloader-obj img iso clean
 
 %.o: %.c
-	$(GCC) $(CFLAGS) -c $< -o $(OUT)/$@
+	$(CC) $(CFLAGS) -c $< -o $(OUT)/$@
 
 %.o: %.asm
 	$(AS) $(ASFLAGS) -f elf32 $< -o $(OUT)/$@
@@ -35,8 +35,7 @@ stage0:
 	$(AS) $(ASFLAGS) -f bin stage0.asm -o $(OUT)/stage0.bin -Dbmain=$(BOOTLOADER_ENTRY)
 
 link:
-	@echo $(OBJS)
-	$(GCC) $(LFLAGS) -T $(LINK) $(OBJS) -o $(OUT)/out.o
+	$(CC) $(LFLAGS) -T $(LINK) $(OBJS) -o $(OUT)/out.o
 
 bootloader-obj:
 	objcopy -O binary $(OUT)/out.o $(OUT)/bootloader.bin
