@@ -5,7 +5,7 @@ CC=i686-elf-gcc
 CFLAGS=-std=gnu99 -ffreestanding -O0 -Wall -Wextra
 
 LFLAGS=-ffreestanding -O0 -nostdlib -lgcc
-LINK=../link.ld
+LINK=link.ld
 
 BOOTLOADER_ENTRY=0x7e00
 OUT=../build
