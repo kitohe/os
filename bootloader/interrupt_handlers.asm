@@ -173,23 +173,3 @@ remap_pic:
     out 0xa1, al        ; write to slave PIC
 
     ret
-
-; irq0_handler:
-;   mov al, 0x20
-;   out 0x20, al
-;   ret
-; irq1_handler:
-; irq2_handler:
-; irq3_handler:
-; irq4_handler:
-; irq5_handler:
-; irq6_handler:
-; irq7_handler:
-; irq8_handler:
-; irq9_handler:
-; irq10_handler:
-; irq11_handler:
-; irq12_handler:
-; irq13_handler:
-; irq14_handler:
-; irq15_handler:
