@@ -11,7 +11,7 @@ BOOTLOADER_ENTRY=0x7e00
 OUT=../build
 
 C_SRCS := $(wildcard *.c) # find all C files
-C_OBJS := $(patsubst %.c, %.o, $(C_SRCS)) # substitue all .c files to .o
+C_OBJS := $(patsubst %.c, %.c.o, $(C_SRCS)) # substitue all .c files to .o
 
 AS_SRCS := $(wildcard *.asm)
 AS_SRSC := $(filter-out stage0.asm, $(AS_SRCS))
@@ -23,13 +23,16 @@ OBJS := $(addprefix $(OUT)/, $(OBJS))
 
 .PHONY: all clean
 
-all: stage0 $(C_OBJS) $(AS_OBJS) link bootloader-obj img iso clean
+all: stage0 $(C_OBJS) $(AS_OBJS) link bootloader-obj img iso #clean
 
-%.o: %.c
+%.c.o: %.c
 	$(CC) $(CFLAGS) -c $< -o $(OUT)/$@
 
 %.o: %.asm
 	$(AS) $(ASFLAGS) -f elf32 $< -o $(OUT)/$@
+
+$(PHEADER_OBJS): %.h.gch: %.h
+	$(CC) $(CFLAGS) -c $< -o $(OUT)/$@
 
 stage0:
 	$(AS) $(ASFLAGS) -f bin stage0.asm -o $(OUT)/stage0.bin -Dbmain=$(BOOTLOADER_ENTRY)

@@ -21,6 +21,23 @@ global irq15
 global load_idt
 global remap_pic
 
+extern irq0_handler
+extern irq1_handler
+extern irq2_handler
+extern irq3_handler
+extern irq4_handler
+extern irq5_handler
+extern irq6_handler
+extern irq7_handler
+extern irq8_handler
+extern irq9_handler
+extern irq10_handler
+extern irq11_handler
+extern irq12_handler
+extern irq13_handler
+extern irq14_handler
+extern irq15_handler
+
 irq0:
   pusha
   cli
@@ -157,22 +174,22 @@ remap_pic:
 
     ret
 
-irq0_handler:
-  mov al, 0x20
-  out 0x20, al
-  ret
-irq1_handler:
-irq2_handler:
-irq3_handler:
-irq4_handler:
-irq5_handler:
-irq6_handler:
-irq7_handler:
-irq8_handler:
-irq9_handler:
-irq10_handler:
-irq11_handler:
-irq12_handler:
-irq13_handler:
-irq14_handler:
-irq15_handler:
+; irq0_handler:
+;   mov al, 0x20
+;   out 0x20, al
+;   ret
+; irq1_handler:
+; irq2_handler:
+; irq3_handler:
+; irq4_handler:
+; irq5_handler:
+; irq6_handler:
+; irq7_handler:
+; irq8_handler:
+; irq9_handler:
+; irq10_handler:
+; irq11_handler:
+; irq12_handler:
+; irq13_handler:
+; irq14_handler:
+; irq15_handler:
