@@ -49,7 +49,7 @@ img:
 	dd if=$(OUT)/bootloader.bin of=$(OUT)/bootloader.img conv=notrunc seek=1
 
 iso:
-	cd ../build && genisoimage -no-emul-boot -boot-load-size 4 -input-charset iso8859-1 -o bootloader.iso -b bootloader.img .
+	cd ../build && genisoimage -J -R -no-emul-boot -boot-load-size 4 -input-charset iso8859-1 -o bootloader.iso -b bootloader.img .
 
 clean:
 	rm $(OUT)/*.o
