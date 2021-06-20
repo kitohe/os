@@ -26,7 +26,8 @@ get_next_desc:
     mov bx, 0x1000                  ; segment selector
     mov cx, 0x1                     ; amount of sectors to load (1)
 
-    jmp read_sectors
+    call read_sectors
+    jmp done_reading
 
 ;
 ; This function loads one or more sectors in memory.
@@ -49,7 +50,7 @@ read_one_sector:
     mov ah, 0x42                                ; prepare for int 0x13, ah=0x42 - Extended Read Sectors From Drive
     xor al, al                                  ; clear al
     mov si, disk_address_packet                 ; get address of DAP to si
-    mov di, word [bootdrive]                    ; get bootdrive index to di
+    mov dl, byte [bootdrive]                    ; get bootdrive index to di
     int 0x13                                    ; fetch data from bootdrive
     jc pause                                    ; stop on error
 
@@ -59,7 +60,7 @@ read_one_sector:
     add word [disk_address_packet + 6], ax     ; write new segment to DAP moved 0x800
 
     loop read_one_sector
-    jmp done_reading
+    ret
 
 done_reading:
     mov si, cd_signature            ; get address of cd_signature constant
@@ -78,8 +79,38 @@ found_desc:
     repe cmpsb
     jne next_desc                   ; we didn't find correct description, continue searching...
 
+    ; at this point we have correct session, we can start downloading code
     mov si, done
     call print_string
+    ; ----
+    ; Primary Volume Descriptor begins at offset 156 (0x9c),
+    ; First bit (156th) is directory entry length
+    ; Second bit (157th) is extended attribute record length
+    ; Next byte (158-165) is Location of file
+    ; Byte after that (166-173) is file size
+    ; where file happens to be root directory
+    ; https://slideplayer.com/slide/1518077/5/images/27/Figure+The+ISO+9660+directory+entry..jpg
+    mov eax, dword [es:0x109e]              ; find root directory start
+    mov dword [root_directory_start], eax   ; save it to variable
+    mov eax, dword [es:0x10a6]              ; find root directory size
+    mov dword [root_directory_size], eax    ; save it to variable
+
+    ; now we have to calculate number of sectors that we will download to memory
+    movzx ebx, word [sector_size]           ; get sector size
+    div ebx                                 ; root_directory_size / sector_size; store remainder in edx
+    cmp edx, 0x0                            ; check if remainder is 0, if it is continue if not increase sector that have to loaded
+    je no_remainder
+    inc eax
+
+no_remainder:
+    mov word [root_directory_sectors], ax   ; save number of sectors to load, to variable
+    mov eax, [root_directory_start]         ; set initial sector to load
+    mov bx, 0x1000                          ; load it at 0x1000
+    mov cx, [root_directory_sectors]        ; amount of sectors to load
+    call read_sectors                       ; load sectors
+    ; at this point we have loaded at 0x1000, root directory
+    xchg bx, bx
+    ;-----
     jmp pause
 
 next_desc:
@@ -146,7 +177,7 @@ gdt:
     dw gdt - gdt_base - 1 ; For limit storage
     dd gdt_base           ; Start of GDT
 
-bootdrive:              dw 0
+bootdrive:              db 0
 sector_size:            dw 0
 disk_address_packet:    resb 16
 cd_signature:           db 0x2,'CD001'
@@ -154,7 +185,10 @@ joilet_signature:       db 0x25, 0x2f, 0x45
 file_found_message:     db "Found volume descriptor of a session...\n\r", 0
 here:                   db "here", 0ah, 0
 done:                   db "done", 0ah, 0
-desc_sector:            dw 0
+root_directory_start:   dd 0
+root_directory_size:    dd 0
+root_directory_sectors: dw 0
+desc_sector:            dd 0
 
 times 510 - ($ - $$)  db 0  ; Zerofill up to 510 bytes
 dw 0xaa55                   ; Boot Sector signature
