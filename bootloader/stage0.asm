@@ -2,6 +2,7 @@
 [bits 16]
 
 entry:
+    xchg bx, bx
     cli                 ; disable interrupts
     cld                 ; clear direction flag | lowest to highest 
 
@@ -13,29 +14,20 @@ entry:
     xor ax, ax
     mov ds, ax
 
-    ; The first volume descriptor is the 17th sector of the disk. */
+    ; The first volume descriptor is the 17th sector of the disk.
+    ; per Joilet format specification:
+    ; https://docs.microsoft.com/en-us/windows/win32/imapi/disc-formats#joliet
     mov byte [bootdrive], dl        ; save bootdrive
-    mov word [sector_size], 0x800   ; assume that sector is 2048 bytes
+    mov word [sector_size], 0x800   ; assume that sector is 2048 bytes (CD-ROM/DVD)
+    mov eax, 0x10                    ; 17th sector, this is where Joiliet header should be located
 
 get_next_desc:
-    mov al, 0x10                    ; 17th sector
-    mov byte [desc_sector], al
-
+    mov dword [desc_sector], eax    ; save currently processed sector
     mov bx, 0x1000                  ; segment selector
-    mov es, bx                      ; to load es reg -> reg
-    xor bx, bx                      ; contains offset
-    mov cx, 0x1                     ; amount of sectors to load
+    mov cx, 0x1                     ; amount of sectors to load (1)
 
     jmp read_sectors
 
-done_reading:
-    mov si, cd_signature            ; get address of cd_signature constant
-    mov di, 0x1000                  ; load segment to search
-    mov cx, 0x6                     ; load counter, 6 bytes
-    repe cmpsb
-    je found_desc
-found_desc:
-    jmp pause
 ;
 ; This function loads one or more sectors in memory.
 ;
@@ -59,7 +51,7 @@ read_one_sector:
     mov si, disk_address_packet                 ; get address of DAP to si
     mov di, word [bootdrive]                    ; get bootdrive index to di
     int 0x13                                    ; fetch data from bootdrive
-    jc pause
+    jc pause                                    ; stop on error
 
     inc word [disk_address_packet + 8]         ; move to next sector
     mov ax, word [sector_size]                 ; get sector size
@@ -68,6 +60,32 @@ read_one_sector:
 
     loop read_one_sector
     jmp done_reading
+
+done_reading:
+    mov si, cd_signature            ; get address of cd_signature constant
+    mov di, 0x1000                  ; load segment to search
+    mov cx, 0x6                     ; load counter, 6
+    repe cmpsb
+
+    je found_desc                   ; if we've found correct description we continue
+    cmp byte [es:0x1000], 0xff
+    jmp next_desc
+
+found_desc:
+    mov si, joilet_signature        ; load Joliet signature to si
+    mov di, 0x1058                  ; segment that we are searching
+    mov cx, 0x3                     ; load counter, 3
+    repe cmpsb
+    jne next_desc                   ; we didn't find correct description, continue searching...
+
+    mov si, done
+    call print_string
+    jmp pause
+
+next_desc:
+    mov eax, dword [desc_sector]
+    inc eax
+    jmp get_next_desc
 
 pause:
     jmp pause
@@ -81,6 +99,19 @@ pause:
 	mov cr0, eax
 
     jmp dword 0x0018:segg    ; jmp far to load CS
+
+print_string:
+    lodsb       ; read a char
+    cmp al, 0x0 ; check if it is null terminator
+    je return   ; if yes, just return
+
+    mov ah, 0x0e
+    mov bx, 0x07
+    int 0x10
+    jmp print_string
+
+return:
+    ret
 
 [bits 32]
 segg:
@@ -100,8 +131,6 @@ segg:
     ; call cbootloader
     call bmain
 
-
-
 stop:
     cli
     hlt
@@ -119,10 +148,13 @@ gdt:
 
 bootdrive:              dw 0
 sector_size:            dw 0
-desc_sector:            db 0
 disk_address_packet:    resb 16
-cd_signature:           db 0x2, 'CD001'
+cd_signature:           db 0x2,'CD001'
 joilet_signature:       db 0x25, 0x2f, 0x45
+file_found_message:     db "Found volume descriptor of a session...\n\r", 0
+here:                   db "here", 0ah, 0
+done:                   db "done", 0ah, 0
+desc_sector:            dw 0
 
 times 510 - ($ - $$)  db 0  ; Zerofill up to 510 bytes
 dw 0xaa55                   ; Boot Sector signature
