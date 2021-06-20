@@ -55,3 +55,4 @@ clean:
 	rm $(OUT)/*.o
 	rm $(OUT)/*.bin
 	rm $(OUT)/*.img
+	rm $(OUT)/*.iso

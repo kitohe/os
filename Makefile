@@ -1,6 +1,6 @@
 MAKE=make
 
-all: boot
+all: clean boot
 
 boot:
 	cd bootloader && $(MAKE) all
