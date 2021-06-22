@@ -54,13 +54,20 @@ read_one_sector:
     int 0x13                                    ; fetch data from bootdrive
     jc pause                                    ; stop on error
 
-    inc word [disk_address_packet + 8]         ; move to next sector
-    mov ax, word [sector_size]                 ; get sector size
-    shr ax, 0x4                                ; divide by 0x10
-    add word [disk_address_packet + 6], ax     ; write new segment to DAP moved 0x800
-
+    inc dword [disk_address_packet + 8]         ; move to next sector
+    mov ax, word [sector_size]                  ; get sector size
+    shr ax, 0x4                                 ; divide by 0x10
+    add word [disk_address_packet + 6], ax      ; write new segment to DAP moved 0x800
+    cmp cx, 0x1b2
+    je tt
+after_tt:
     loop read_one_sector
     ret
+
+tt:
+    ;nop
+    xchg bx, bx
+    jmp after_tt
 
 done_reading:
     mov si, cd_signature            ; get address of cd_signature constant
@@ -109,9 +116,70 @@ no_remainder:
     mov cx, [root_directory_sectors]        ; amount of sectors to load
     call read_sectors                       ; load sectors
     ; at this point we have loaded at 0x1000, root directory
-    xchg bx, bx
     ;-----
-    jmp pause
+    ;-----
+    ;xchg bx, bx
+    mov di, 0x1000
+search_file:
+    add di, 25                              ; there should be File Flags field
+    cmp byte [es:di], 0                     ; check if this is file @ 0x1025
+    jne next_entry                          ; if not search for next entry in root folder
+
+    ; at this point we've found something that could be our file
+    ;xchg bx, bx
+    push di                                 ; save di
+    add di, 8                               ; byte 33 in directory entry is File Identifier, so we need to check if this is what we are looking for
+    mov si, img_filename
+    mov cx, 0x1b
+    repe cmpsb
+    pop di
+    je found_file
+
+next_entry:
+    add di, 7                               ; navigate to `Length of file identifier (file name)`
+    movzx ax, byte [es:di]                  ; load this value to ax
+    add di, ax                              ; move to last byte of the file name
+
+increment:
+    inc di                                  ; move over the last byte of file name, at this point new entry should start
+    cmp byte [es:di], 0x0                   ; check if we are already at the byte that new entry starts
+    je increment                            ; if we are not, continue moving one byte
+
+    ; check if we have checked all entries of root directory
+    mov eax, dword [root_directory_size]    ; get root directory size
+    add eax, 0x1000                         ; add it do beggining of the root directory
+    cmp di, ax                              ; if it's below we are not at the end
+    jb search_file                          ; and it means we look further here
+
+    jmp next_desc                           ; if its above, we need to look somewhere else
+
+found_file:
+    ; at this point we are at the correct file, and on the flags fields
+    ;xchg bx, bx
+    sub di, 25                              ; so we go to the beggining of this entry
+    mov eax, dword [es:di+2]                ; get location of this entry
+    mov dword [file_start], eax             ; save it to variable
+    mov eax, dword [es:di+10]               ; get length of the entry
+    mov dword [file_size], eax              ; save it to variable
+
+    ; now we have to calculate number of sectors that we need to load
+    movzx ebx, word [sector_size]           ; get sector size to ebx - zero extended
+    div ebx                                 ; file_size / sector_size
+    cmp edx, 0                              ; check if remainder = 0
+    je no_remainder2                        ; if yes, jump
+    inc eax                                 ; if no, increase number of sectors that we have to load
+no_remainder2:
+    mov word [file_sectors], ax             ; save number of sectors to variable
+    mov eax, dword [file_start]
+
+    mov bx, 0x1000
+    mov es, bx
+    xor bx, bx
+    xor ecx, ecx
+    mov cx, word [file_sectors]
+    xchg bx, bx
+    call read_sectors
+    hlt
 
 next_desc:
     mov eax, dword [desc_sector]
@@ -119,17 +187,19 @@ next_desc:
     jmp get_next_desc
 
 pause:
+    mov si, done
+    call print_string
     jmp pause
 
-    lgdt [gdt]          ; Load GDT
+;     lgdt [gdt]          ; Load GDT
 
-    ; enter protected mode
-    cli
-	mov eax, cr0
-	or  eax, (1 << 0)
-	mov cr0, eax
+;     ; enter protected mode
+;     cli
+; 	mov eax, cr0
+; 	or  eax, (1 << 0)
+; 	mov cr0, eax
 
-    jmp dword 0x0018:segg    ; jmp far to load CS
+;     jmp dword 0x0018:segg    ; jmp far to load CS
 
 print_string:
     lodsb       ; read a char
@@ -144,51 +214,53 @@ print_string:
 return:
     ret
 
-[bits 32]
-segg:
-    ; Set segments
-    mov ax, 0x20        ; Offset to DS
-    mov es, ax
-    mov ds, ax
-    mov fs, ax
-    mov gs, ax
-    mov ss, ax
+; [bits 32]
+; segg:
+;     ; Set segments
+;     mov ax, 0x20        ; Offset to DS
+;     mov es, ax
+;     mov ds, ax
+;     mov fs, ax
+;     mov gs, ax
+;     mov ss, ax
 
-    ; Setup stack
-    cli                 ; disable interrupts while setting up stack
-    mov esp, 0x7c00     ; advance stack 0x7c00 bytes 
-    sti                 ; re-enable interrupts
+;     ; Setup stack
+;     cli                 ; disable interrupts while setting up stack
+;     mov esp, 0x7c00     ; advance stack 0x7c00 bytes 
+;     sti                 ; re-enable interrupts
 
-    ; call cbootloader
-    call bmain
+;     ; call cbootloader
+;     call bmain
 
-stop:
-    cli
-    hlt
+; stop:
+;     cli
+;     hlt
 
-align 8
-gdt_base:
-    dq 0x0000000000000000 ; 0x0000 | Null descriptor
-    dq 0x00009a007c00ffff ; 0x0008 | CS | 16-bit code segment descriptor, segment present, base 0x7c00
-    dq 0x000092000000ffff ; 0x0010 | DS | 16-bit data segment descriptor, segment present, base 0
-    dq 0x00cf9a000000ffff ; 0x0018 | CS | 32-bit code segment descriptor, segment present, base 0
-    dq 0x00cf92000000ffff ; 0x0020 | DS | 32-bit data segment descriptor, segment present, base 0
-gdt:
-    dw gdt - gdt_base - 1 ; For limit storage
-    dd gdt_base           ; Start of GDT
+; align 8
+; gdt_base:
+;     dq 0x0000000000000000 ; 0x0000 | Null descriptor
+;     dq 0x00009a007c00ffff ; 0x0008 | CS | 16-bit code segment descriptor, segment present, base 0x7c00
+;     dq 0x000092000000ffff ; 0x0010 | DS | 16-bit data segment descriptor, segment present, base 0
+;     dq 0x00cf9a000000ffff ; 0x0018 | CS | 32-bit code segment descriptor, segment present, base 0
+;     dq 0x00cf92000000ffff ; 0x0020 | DS | 32-bit data segment descriptor, segment present, base 0
+; gdt:
+;     dw gdt - gdt_base - 1 ; For limit storage
+;     dd gdt_base           ; Start of GDT
 
 bootdrive:              db 0
 sector_size:            dw 0
 disk_address_packet:    resb 16
 cd_signature:           db 0x2,'CD001'
 joilet_signature:       db 0x25, 0x2f, 0x45
-file_found_message:     db "Found volume descriptor of a session...\n\r", 0
-here:                   db "here", 0ah, 0
 done:                   db "done", 0ah, 0
 root_directory_start:   dd 0
 root_directory_size:    dd 0
 root_directory_sectors: dw 0
+img_filename:           db 0,'b',0,'o',0,'o',0,'t',0,'l',0,'o',0,'a',0,'d',0,'e',0,'r',0,'.',0,'i',0,'m',0,'g'
 desc_sector:            dd 0
+file_start:             dd 0
+file_size:              dd 0
+file_sectors:           dw 0
 
 times 510 - ($ - $$)  db 0  ; Zerofill up to 510 bytes
 dw 0xaa55                   ; Boot Sector signature
