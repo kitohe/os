@@ -2,7 +2,7 @@ ENTRY(bmain)
 
 SECTIONS
 {
-    . = 0x7e00;
+    . = 0x100800;
 
     /* .text BLOCK(4K) : ALIGN(4K)
 	{

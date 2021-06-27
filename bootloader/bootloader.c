@@ -5,7 +5,6 @@ void bmain()
 {
     volatile int a = 0x41414141;
     idt_init();
-    // idt_load();
     // just a test
     volatile int b = 0x41414141;
 

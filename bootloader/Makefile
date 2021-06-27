@@ -7,7 +7,7 @@ CFLAGS=-std=gnu99 -ffreestanding -O0 -Wall -Wextra
 LFLAGS=-ffreestanding -O0 -nostdlib -lgcc
 LINK=link.ld
 
-BOOTLOADER_ENTRY=0x7e00
+BOOTLOADER_ENTRY=0x100800 # TODO: change this later to where acutal C kernel will be
 OUT=../build
 
 C_SRCS := $(wildcard *.c) # find all C files
@@ -46,12 +46,13 @@ bootloader-obj:
 img:
 	dd if=/dev/zero of=$(OUT)/bootloader.img bs=1024 count=1440
 	dd if=$(OUT)/stage0.bin of=$(OUT)/bootloader.img conv=notrunc
-	dd if=$(OUT)/bootloader.bin of=$(OUT)/bootloader.img conv=notrunc seek=1
+	dd if=$(OUT)/bootloader.bin of=$(OUT)/bootloader.img conv=notrunc bs=1024 seek=2
 
 iso:
-	cd ../build && genisoimage -no-emul-boot -boot-load-size 4 -input-charset iso8859-1 -o bootloader.iso -b bootloader.img .
+	cd ../build && genisoimage -J -R -no-emul-boot -boot-load-size 4 -input-charset iso8859-1 -o bootloader.iso -b bootloader.img .
 
 clean:
 	rm $(OUT)/*.o
 	rm $(OUT)/*.bin
 	rm $(OUT)/*.img
+	rm $(OUT)/*.iso
