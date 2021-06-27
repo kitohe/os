@@ -3,8 +3,9 @@
 
 entry:
     xchg bx, bx
+
     cli                 ; disable interrupts
-    cld                 ; clear direction flag | lowest to highest 
+    cld                 ; clear direction flag | lowest to highest
 
     ; Setup a20 https://wiki.osdev.org/A20_Line
     in al, 0x92
@@ -14,6 +15,32 @@ entry:
     xor ax, ax
     mov ds, ax
 
+    jmp 0x0000:0x7e00       ; we are going to skip first 512 bytes
+
+times 510 - ($ - $$)  db 0  ; Zerofill up to 510 bytes
+dw 0xaa55                   ; Boot Sector signature
+
+    ; enter unreal mode: https://wiki.osdev.org/Unreal_Mode
+    mov ss, ax
+    mov sp, 0x9c00
+    push ds
+
+    lgdt [gdt]
+
+    mov eax, cr0
+    or al, 1
+    mov cr0, eax
+
+    mov bx, 0x20
+    mov ds, bx
+
+    and al, 0xfe
+    mov cr0, eax
+
+    pop ds
+    ; end enter unreal mode
+
+    ; Bootloader based on https://forum.osdev.org/viewtopic.php?f=1&t=20561#p162239
     ; The first volume descriptor is the 17th sector of the disk.
     ; per Joilet format specification:
     ; https://docs.microsoft.com/en-us/windows/win32/imapi/disc-formats#joliet
@@ -52,22 +79,20 @@ read_one_sector:
     mov si, disk_address_packet                 ; get address of DAP to si
     mov dl, byte [bootdrive]                    ; get bootdrive index to di
     int 0x13                                    ; fetch data from bootdrive
-    jc pause                                    ; stop on error
+    jc stop                                    ; stop on error
 
     inc dword [disk_address_packet + 8]         ; move to next sector
     mov ax, word [sector_size]                  ; get sector size
     shr ax, 0x4                                 ; divide by 0x10
     add word [disk_address_packet + 6], ax      ; write new segment to DAP moved 0x800
-    cmp cx, 0x1b2
-    je tt
-after_tt:
+
     loop read_one_sector
     ret
 
-tt:
-    ;nop
-    xchg bx, bx
-    jmp after_tt
+next_desc:
+    mov eax, dword [desc_sector]                ; get desc_sector to eax
+    inc eax                                     ; increase it
+    jmp get_next_desc
 
 done_reading:
     mov si, cd_signature            ; get address of cd_signature constant
@@ -87,8 +112,8 @@ found_desc:
     jne next_desc                   ; we didn't find correct description, continue searching...
 
     ; at this point we have correct session, we can start downloading code
-    mov si, done
-    call print_string
+    ;mov si, done
+    ;call print_string
     ; ----
     ; Primary Volume Descriptor begins at offset 156 (0x9c),
     ; First bit (156th) is directory entry length
@@ -111,14 +136,12 @@ found_desc:
 
 no_remainder:
     mov word [root_directory_sectors], ax   ; save number of sectors to load, to variable
-    mov eax, [root_directory_start]         ; set initial sector to load
+    mov eax, dword [root_directory_start]   ; set initial sector to load
     mov bx, 0x1000                          ; load it at 0x1000
-    mov cx, [root_directory_sectors]        ; amount of sectors to load
+    mov cx, word [root_directory_sectors]   ; amount of sectors to load
     call read_sectors                       ; load sectors
     ; at this point we have loaded at 0x1000, root directory
-    ;-----
-    ;-----
-    ;xchg bx, bx
+
     mov di, 0x1000
 search_file:
     add di, 25                              ; there should be File Flags field
@@ -126,7 +149,6 @@ search_file:
     jne next_entry                          ; if not search for next entry in root folder
 
     ; at this point we've found something that could be our file
-    ;xchg bx, bx
     push di                                 ; save di
     add di, 8                               ; byte 33 in directory entry is File Identifier, so we need to check if this is what we are looking for
     mov si, img_filename
@@ -155,7 +177,6 @@ increment:
 
 found_file:
     ; at this point we are at the correct file, and on the flags fields
-    ;xchg bx, bx
     sub di, 25                              ; so we go to the beggining of this entry
     mov eax, dword [es:di+2]                ; get location of this entry
     mov dword [file_start], eax             ; save it to variable
@@ -170,36 +191,49 @@ found_file:
     inc eax                                 ; if no, increase number of sectors that we have to load
 no_remainder2:
     mov word [file_sectors], ax             ; save number of sectors to variable
-    mov eax, dword [file_start]
 
-    mov bx, 0x1000
-    mov es, bx
-    xor bx, bx
-    xor ecx, ecx
-    mov cx, word [file_sectors]
-    xchg bx, bx
+    mov dword [mem], 0x100000               ; new place for our code (1M)
+loop2:
+    mov eax, dword [file_start]             ; sector start
+    mov bx, 0x1000                          ; where
+    mov cx, 0x1;                            ; counter
     call read_sectors
-    hlt
 
-next_desc:
-    mov eax, dword [desc_sector]
-    inc eax
-    jmp get_next_desc
+    inc dword [file_start]                  ; increment sector which we'll be loading
+    dec word [file_sectors]                 ; decrement number of sectors yet to be loaded
 
-pause:
-    mov si, done
+    cmp word [file_sectors], 0x0            ; if there are no more sectors to copy
+    je copied                               ; jump, if there are continue copying
+
+    mov cx, word [sector_size]              ; loop counter (number of bytes to copy)
+    mov esi, 0x1000                         ; location from which to copy
+    mov edi, dword [mem]                    ; location where to copy
+loop3:
+    mov al, byte [ds:esi]                   ; byte to copy
+    mov byte [ds:edi], al                   ; copy to destination
+    inc edi                                 ; increase destination address
+    inc esi                                 ; move to next byte to copy
+    dec cx                                  ; decrement number of bytes yet to be copied
+    cmp cx, 0x0                             ; if 0, we load next sector
+    jne loop3
+    mov dword [mem], edi                    ; update `mem` variable with new offset
+    jmp loop2
+
+    jmp stop
+
+copied:
+    mov si, done_downloading_str
     call print_string
-    jmp pause
 
-;     lgdt [gdt]          ; Load GDT
+    mov si, kernel_jump_str
+    call print_string
 
-;     ; enter protected mode
-;     cli
-; 	mov eax, cr0
-; 	or  eax, (1 << 0)
-; 	mov cr0, eax
+	mov eax, cr0
+	or  eax, (1 << 0)
+	mov cr0, eax
 
-;     jmp dword 0x0018:segg    ; jmp far to load CS
+    xchg bx, bx
+    jmp dword 0x18:protected
 
 print_string:
     lodsb       ; read a char
@@ -211,48 +245,31 @@ print_string:
     int 0x10
     jmp print_string
 
+stop:
+    jmp stop
+
 return:
     ret
 
-; [bits 32]
-; segg:
-;     ; Set segments
-;     mov ax, 0x20        ; Offset to DS
-;     mov es, ax
-;     mov ds, ax
-;     mov fs, ax
-;     mov gs, ax
-;     mov ss, ax
+[bits 32]
+protected:
+    mov ax, 0x20        ; Offset to DS
+    mov es, ax
+    mov ds, ax
+    mov fs, ax
+    mov gs, ax
+    mov ss, ax
 
-;     ; Setup stack
-;     cli                 ; disable interrupts while setting up stack
-;     mov esp, 0x7c00     ; advance stack 0x7c00 bytes 
-;     sti                 ; re-enable interrupts
+    ; Setup stack
+    mov esp, 0x7c00
 
-;     ; call cbootloader
-;     call bmain
-
-; stop:
-;     cli
-;     hlt
-
-; align 8
-; gdt_base:
-;     dq 0x0000000000000000 ; 0x0000 | Null descriptor
-;     dq 0x00009a007c00ffff ; 0x0008 | CS | 16-bit code segment descriptor, segment present, base 0x7c00
-;     dq 0x000092000000ffff ; 0x0010 | DS | 16-bit data segment descriptor, segment present, base 0
-;     dq 0x00cf9a000000ffff ; 0x0018 | CS | 32-bit code segment descriptor, segment present, base 0
-;     dq 0x00cf92000000ffff ; 0x0020 | DS | 32-bit data segment descriptor, segment present, base 0
-; gdt:
-;     dw gdt - gdt_base - 1 ; For limit storage
-;     dd gdt_base           ; Start of GDT
+    call bmain
 
 bootdrive:              db 0
 sector_size:            dw 0
 disk_address_packet:    resb 16
 cd_signature:           db 0x2,'CD001'
 joilet_signature:       db 0x25, 0x2f, 0x45
-done:                   db "done", 0ah, 0
 root_directory_start:   dd 0
 root_directory_size:    dd 0
 root_directory_sectors: dw 0
@@ -261,6 +278,17 @@ desc_sector:            dd 0
 file_start:             dd 0
 file_size:              dd 0
 file_sectors:           dw 0
+mem:                    dd 0 ; new place for our code
 
-times 510 - ($ - $$)  db 0  ; Zerofill up to 510 bytes
-dw 0xaa55                   ; Boot Sector signature
+done_downloading_str:   db 'Done downloading!', 0xd, 0xa, 0
+kernel_jump_str:        db 'Jumping to Kernel!', 0xd, 0xa, 0
+
+gdt_base:
+    dq 0x0000000000000000 ; 0x0000 | Null descriptor
+    dq 0x00009a007c00ffff ; 0x0008 | CS | 16-bit code segment descriptor, segment present, base 0x7c00
+    dq 0x000092000000ffff ; 0x0010 | DS | 16-bit data segment descriptor, segment present, base 0
+    dq 0x00cf9a000000ffff ; 0x0018 | CS | 32-bit code segment descriptor, segment present, base 0
+    dq 0x00cf92000000ffff ; 0x0020 | DS | 32-bit data segment descriptor, segment present, base 0
+gdt:
+    dw gdt - gdt_base - 1 ; For limit storage
+    dd gdt_base           ; Start of GDT
